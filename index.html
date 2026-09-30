@@ -1,0 +1,137 @@
+import json
+import random
+from typing import List, Dict
+
+# -------------------------------------------------------------
+# 1. マスターデータ定義
+# -------------------------------------------------------------
+SHOP_ITEMS = [
+    {"id": 1, "name": "頑丈な鉄フライパン", "desc": "ずっしり重い。殴れそうだし調理もできそう。"},
+    {"id": 2, "name": "超強力両面テープ", "desc": "一度貼ったら大の大人でも剥がせない粘着力。"},
+    {"id": 3, "name": "特濃ハチミツの壺", "desc": "ドロドロで高カロリー。甘くて美味。"},
+    {"id": 4, "name": "100mの極細タコ糸", "desc": "軽くて長い。引張強度そこそこ。"},
+    {"id": 5, "name": "アヒルのおもちゃ", "desc": "どこにでもある黄色いゴムアヒル。結構うるさい。"},
+    {"id": 6, "name": "大量のプチプチ", "desc": "荷造り用の気泡緩衝材。潰すと気持ちいい。"},
+    {"id": 7, "name": "絶対に割れないヘリウム風船", "desc": "なぜか針を刺しても破裂しない、浮力のある風船。"},
+    {"id": 8, "name": "特濃粉末ワサビ", "desc": "開けた瞬間、涙とクシャミが止まらない刺激臭。"},
+    {"id": 9, "name": "高級タキシード一式", "desc": "ピシッとした仕立て。蝶ネクタイ付き。"},
+    {"id": 10, "name": "金色の拡声器", "desc": "電池長持ち。遠くまで声が響く。"},
+    {"id": 11, "name": "車の予備バッテリー", "desc": "重い。12Vの電気が取り出せる。"},
+    {"id": 12, "name": "万能トゲ抜きピンセット", "desc": "職人手作りの超精密ピンセット。"},
+    {"id": 13, "name": "子供用ビニールプール", "desc": "膨らますと直径1.5mくらいになる。足踏み空気入れ付。"},
+    {"id": 14, "name": "大量の輪ゴム", "desc": "ごく普通の輪ゴム。束ねると結構な弾力。"},
+    {"id": 15, "name": "激辛ハバネロソース", "desc": "触れただけで皮膚がヒリヒリする劇物レベル。"},
+    {"id": 16, "name": "折りたたみ式アルミ脚立", "desc": "軽くて頑丈。ちょっと高いところに手が届く。"},
+    {"id": 17, "name": "巨大な虫眼鏡", "desc": "焦点がよく合う大きなレンズ。"},
+    {"id": 18, "name": "アロマキャンドル", "desc": "100時間燃える。とても心が落ち着く。"},
+    {"id": 19, "name": "中古の黒板消し", "desc": "パンパン叩くと白い煙幕になる。"},
+    {"id": 20, "name": "手巻き式オルゴール", "desc": "哀愁漂うメロディが流れる。"}
+]
+
+DESTINATIONS = [
+    {"name": "超雪山", "flavor": "標高7,500m・極寒の白銀峰。凍傷と滑落の恐怖。"},
+    {"name": "宇宙旅行", "flavor": "真空と無重力のステーション。空気漏れとエイリアン。"},
+    {"name": "トライアスロン会場", "flavor": "酷暑の過酷レース。体力限界と機材トラブル。"},
+    {"name": "薬の行商", "flavor": "怪しい辺境の村。猜疑心の強い村人と奇病の蔓延。"}
+]
+
+# -------------------------------------------------------------
+# 2. プロンプト生成（5段階評価・別解提示用）
+# -------------------------------------------------------------
+def build_evaluation_prompt(destination: dict, crisis: str, inventory: List[dict], player_action: str) -> str:
+    inventory_text = "\n".join([f"- {item['name']}: {item['desc']}" for item in inventory])
+    
+    return f"""
+あなたは不条理サバイバルコメディゲームの冷徹かつユーモアあるGM（ゲームマスター）です。
+プレイヤーが提示した解決策（こじつけ・機転）を厳正に5段階で評価し、指定のJSONフォーマットのみを出力してください。
+
+【状況】
+行き先: {destination['name']}（{destination['flavor']}）
+直面した危機: {crisis}
+
+【プレイヤーの全所持品】
+{inventory_text}
+
+【プレイヤーの行動・こじつけ】
+{player_action}
+
+【評価基準】
+5: 大成功（抜群の発想力、論理性とユーモアの完璧な融合、文句なし）
+4: 成功（理に適っており実用的。危機をしっかり打開できる）
+3: 普通（一応しのげるが代償が大きい、あるいはやや無理がある）
+2: 失敗（無理が祟って悪化する、またはアイテムの特性を誤解している）
+1: 大失敗（自滅、致命的なミス、完全に無意味）
+
+【出力要件】
+以下のJSONスキーマに従い、有効なJSONのみを出力してください（Markdownコードブロックなし）。
+{{
+  "rating": 1〜5の整数,
+  "rating_label": "大失敗" / "失敗" / "普通" / "成功" / "大成功",
+  "score_delta": -20 〜 +30 の整数（1:-20, 2:-10, 3:+5, 4:+15, 5:+30を目安に増減）,
+  "critique": "判定理由と結果の描写（ユーモアを交えつつ、成功・失敗の顛末を語る）",
+  "better_alternative": "プレイヤーの全所持品を見て、「実はこれとこれをこう使えばもっとスマートだったのに」という惜しい別解・模範解答の提示"
+}}
+"""
+
+# -------------------------------------------------------------
+# 3. 判定ロジック（LLM呼び出し or モック）
+# -------------------------------------------------------------
+def judge_player_turn(prompt: str) -> dict:
+    """
+    実際にはここで OpenAI API や Gemini API を呼び出します。
+    ここでは動作確認用のモックレスポンスを返します。
+    """
+    # 実際の実装例（Gemini SDK等の場合）:
+    # response = client.models.generate_content(model="gemini-2.5-flash", contents=prompt)
+    # return json.loads(response.text)
+
+    # テスト用ダミーデータ（3: 普通 のケース）
+    return {
+        "rating": 3,
+        "rating_label": "普通",
+        "score_delta": 5,
+        "critique": "ビニールプールを頭に乗せて威嚇したことでイエティは一時的に怯みましたが、強風に煽られてあなたが斜面を50mほど滑落しました。一命はとりとめたものの体力を大きく消耗しました。",
+        "better_alternative": "所持品の『特濃粉末ワサビ』を『金色の拡声器』のメガホン部にセットし、強風の風上から息を吹き込んでワサビ煙幕を浴びせれば、自身を危険に晒さず撃退できました。"
+    }
+
+# -------------------------------------------------------------
+# 4. ゲーム進行管理
+# -------------------------------------------------------------
+class GameSession:
+    def __init__(self, selected_ids: List[int]):
+        self.inventory = [item for item in SHOP_ITEMS if item["id"] in selected_ids]
+        self.destination = random.choice(DESTINATIONS)
+        self.survival_points = 50  # 0になるとゲームオーバー、100で完全生還
+        self.turn = 1
+
+    def resolve_crisis(self, crisis_description: str, player_action: str):
+        print(f"\n--- [ターン {self.turn}] 危機: {crisis_description} ---")
+        print(f"プレイヤーの行動: {player_action}")
+        
+        prompt = build_evaluation_prompt(self.destination, crisis_description, self.inventory, player_action)
+        result = judge_player_turn(prompt)
+
+        # スコア反映
+        self.survival_points += result["score_delta"]
+
+        # 結果表示
+        print(f"\n【判定結果】: 星 {result['rating']}/5 （{result['rating_label']}）")
+        print(f"【サバイバルPt増減】: {result['score_delta']:+d} Pt (現在: {self.survival_points} Pt)")
+        print(f"【結果描写】\n{result['critique']}")
+        print(f"\n💡【GMからの別解アドバイス】\n{result['better_alternative']}")
+        
+        self.turn += 1
+
+# -------------------------------------------------------------
+# 実行テスト
+# -------------------------------------------------------------
+if __name__ == "__main__":
+    # プレイヤーが選んだ10個のアイテムID
+    chosen_ids = [1, 2, 6, 7, 8, 10, 12, 13, 15, 17]
+    session = GameSession(chosen_ids)
+
+    # 模擬ターン実行
+    session.resolve_crisis(
+        crisis_description="獰猛なイエティが猛スピードで突進してくる！",
+        player_action="ビニールプールを頭上に掲げて怪獣のフリをし、メガホンで叫んで威嚇する。"
+    )
